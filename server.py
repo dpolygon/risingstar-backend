@@ -1,10 +1,9 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory, abort
 from dotenv import load_dotenv
 from flask_cors import CORS, cross_origin
 
 import requests
 import os
-
 
 app = Flask(__name__)
 CORS(app)
@@ -25,7 +24,12 @@ def get_reviews():
     review_data = response.json()
     return jsonify(review_data)
 
+app.config["CLIENT_PDFS"] = '/Users/danielgonzalez/Desktop/risingstar-backend/client/documents/pdfs'
+
 @app.route("/get-pdf/<string:file_name>")
 def get_pdf(file_name):
-    print(file_name)
-    return "Thanks"
+    
+    try:
+        return send_from_directory(app.config["CLIENT_PDFS"], path=file_name, as_attachment=False)
+    except FileNotFoundError:
+        abort(404)
