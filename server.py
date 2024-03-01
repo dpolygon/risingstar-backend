@@ -9,9 +9,9 @@ import os
 app = Flask(__name__)
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = '587'
-app.config['MAIL_DEFAULT_SENDER'] = 'risingstarsbot@gmail.com'
-app.config['MAIL_USERNAME'] = 'risingstarsbot@gmail.com'
-app.config['MAIL_PASSWORD'] = 'kbas cqzn tkcn dsro'
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('RS_BOT_EMAIL_USERNAME')
+app.config['MAIL_USERNAME'] = os.environ.get('RS_BOT_EMAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('RS_BOT_EMAIL_PASSWORD')
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 
@@ -21,7 +21,7 @@ mail = Mail(app)
 @app.route("/send-text", methods=['POST'])
 def send_text():
     msg = Message("Test",
-              recipients=["5129175055@txt.att.net"])
+              recipients=[os.environ.get('RS_BOT_RECIPIENT')])
     msg.body = request.json
     mail.send(msg) 
     return request.json
