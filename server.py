@@ -30,7 +30,7 @@ def send_mail():
 @celery.task
 def send_async_mail(data): 
     with app.app_context():
-        msg = Message(f"{data['email']} {data['name']}",
+        msg = Message(f"{data['contactInfo']} {data['name']}",
                     recipients=[os.environ.get('RS_BOT_RECIPIENT')])
         msg.body = data['message']
         mail.send(msg) 
@@ -44,7 +44,7 @@ def send_txt():
     data = {
         "chat_id": user_id,
         "text": "Name: " + user_data['name'] + "\n" + 
-                "Number: " + user_data['phoneNumber'] + "\n" + 
+                "Number: " + user_data['contactInfo'] + "\n" + 
                 "Message: " + user_data['message']
     }
     response = requests.post(url, data=data)
