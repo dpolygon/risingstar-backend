@@ -22,6 +22,44 @@ CORS(app)
 mail = Mail(app)
 celery = Celery('mail_tasks', broker='redis://localhost:6379/0')
 
+@app.route("/send-application", methods=['POST'])
+def send_application():
+    # Get form data
+    name = request.form.get('name')
+    phoneNumber = request.form.get('phoneNumber')
+    email = request.form.get('email')
+    childName = request.form.get('childName')
+    childAge = request.form.get('childAge')
+    date = request.form.get('date')
+    message = request.form.get('message')
+
+    # Process file uploads
+    files = [{'filename': file.filename, 'content': file.read()} for file in request.files.getlist('files')]
+
+    # Create and send email
+    send_async_application.delay(name, phoneNumber, email, childName, childAge, date, message, files)
+    return jsonify({"message": "Application submitted successfully"}), 200
+
+@celery.task
+def send_async_application(name, phoneNumber, email, childName, childAge, date, message, files):
+    with app.app_context():
+        msg = Message("Application Form Submission",
+                      sender=os.environ.get('RS_BOT_EMAIL_USERNAME'),
+                      recipients=[os.environ.get('RS_BOT_RECIPIENT')])
+        msg.body = ("Name: " + name +
+                        "\nPhone Number: " + phoneNumber + 
+                        "\nEmail: " + email + 
+                        "\nChild's Name: " + childName + 
+                        "\nChild's Age: " + childAge + 
+                        "\nDesired Start Date: " + date + 
+                        "\nMessage: " + message + "\n\n\n")
+
+        for file_data in files:
+            msg.attach(file_data['filename'], "application/pdf", file_data['content'])
+
+        # Send the email
+        mail.send(msg)
+
 @app.route("/send-mail", methods=['POST'])
 def send_mail():
     send_async_mail.delay(request.json)
