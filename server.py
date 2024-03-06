@@ -55,7 +55,16 @@ def send_async_application(name, phoneNumber, email, childName, childAge, date, 
                         "\nMessage: " + message + "\n\n\n")
 
         for file_data in files:
-            msg.attach(file_data['filename'], "application/pdf", file_data['content'])
+            if file_data['filename'].endswith('.pdf'):
+                # Attach PDF files
+                msg.attach(file_data['filename'], "application/pdf", file_data['content'])
+            elif file_data['filename'].endswith('.zip'):
+                # Attach ZIP files
+                msg.attach(file_data['filename'], "application/zip", file_data['content'])
+            else:
+                # Handle other file types if needed
+                pass
+
 
         # Send the email
         mail.send(msg)
