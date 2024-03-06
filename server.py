@@ -72,6 +72,6 @@ app.config["CLIENT_PDFS"] = '/Users/danielgonzalez/Desktop/risingstar-backend/cl
 def get_pdf(file_name):
     
     try:
-        return send_from_directory(app.config["CLIENT_PDFS"], path=file_name, as_attachment=False)
+        return send_from_directory(app.config["CLIENT_PDFS"], path=file_name, as_attachment=True)
     except FileNotFoundError:
         abort(404)
