@@ -20,9 +20,9 @@ app.config['MAIL_USE_SSL'] = False
 
 CORS(app)
 mail = Mail(app)
-celery = Celery('mail_tasks', broker='redis://localhost:6379/0')
+celery = Celery('mail_tasks', broker='10.195.228.155:6379')
 
-@app.route("/send-application", methods=['POST'])
+@app.route("/api/send-application", methods=['POST'])
 def send_application():
     # Get form data
     name = request.form.get('name')
@@ -69,7 +69,7 @@ def send_async_application(name, phoneNumber, email, childName, childAge, date, 
         # Send the email
         mail.send(msg)
 
-@app.route("/send-mail", methods=['POST'])
+@app.route("/api/send-mail", methods=['POST'])
 def send_mail():
     send_async_mail.delay(request.json)
     return request.json
@@ -82,7 +82,7 @@ def send_async_mail(data):
         msg.body = data['message']
         mail.send(msg) 
 
-@app.route("/send-text", methods=['POST', 'GET'])
+@app.route("/api/send-text", methods=['POST', 'GET'])
 def send_txt():
     bot_token = os.environ.get('RS_BOT_TOKEN')
     user_id = os.environ.get('RS_BOT_ID')
@@ -97,7 +97,7 @@ def send_txt():
     response = requests.post(url, data=data)
     return jsonify(response.json())
 
-@app.route("/reviews", methods=['GET'])
+@app.route("/api/reviews", methods=['GET'])
 def get_reviews():
     url = "https://api.yelp.com/v3/businesses/rising-stars-bilingual-daycare-manchaca-2/reviews?limit=20&sort_by=newest"
     apiKey  = os.environ.get('REACT_APP_YELP_REVIEWS_API')
@@ -113,9 +113,9 @@ def get_reviews():
     review_data = response.json()
     return jsonify(review_data)
 
-app.config["CLIENT_PDFS"] = '/Users/danielgonzalez/Desktop/risingstar-backend/client/documents/pdfs'
+app.config["CLIENT_PDFS"] = os.path.join(os.getcwd(), 'client', 'documents', 'pdfs')
 
-@app.route("/get-pdf/<string:file_name>")
+@app.route("/api/get-pdf/<string:file_name>")
 def get_pdf(file_name):
     
     try:

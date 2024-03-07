@@ -6,3 +6,7 @@ backend for rising stars
 1. redis-server
 2. flask --app server.py run
 3. celery -A server.celery worker --loglevel=INFO
+
+# To update requirements.txt
+1. pip3 install pipreqs
+2. python3 -m pipreqs.pipreqs .
