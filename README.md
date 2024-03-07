@@ -1,6 +1,10 @@
 # risingstar-backend
 backend for rising stars
 
+# to redeploy
+1. gcloud config set project rising-stars-backend
+2. gcloud run deploy
+
 # How Do I Run This Backend?
 3 easy steps to run:
 1. redis-server

@@ -18,9 +18,9 @@ app.config['MAIL_PASSWORD'] = os.environ.get('RS_BOT_EMAIL_PASSWORD')
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 
-CORS(app, resources={r"/api/*": {"origins": "https://risingstarsaustin.com"}})
+CORS(app)
 mail = Mail(app)
-celery = Celery('mail_tasks', broker='10.195.228.155:6379')
+celery = Celery('mail_tasks', broker='redis://localhost:6379/0')
 
 @app.route("/api/send-application", methods=['POST'])
 def send_application():
@@ -98,7 +98,6 @@ def send_txt():
     return jsonify(response.json())
 
 @app.route("/api/reviews", methods=['GET'])
-@cross_origin(origin='https://risingstarsaustin.com',headers=['Content- Type','Authorization'])
 def get_reviews():
     url = "https://api.yelp.com/v3/businesses/rising-stars-bilingual-daycare-manchaca-2/reviews?limit=20&sort_by=newest"
     apiKey  = os.environ.get('REACT_APP_YELP_REVIEWS_API')
@@ -114,7 +113,7 @@ def get_reviews():
     review_data = response.json()
     return jsonify(review_data)
 
-app.config["CLIENT_PDFS"] = os.path.join(os.getcwd(), 'client', 'documents', 'pdfs')
+app.config["CLIENT_PDFS"] = '/Users/danielgonzalez/Desktop/risingstar-backend/client/documents/pdfs'
 
 @app.route("/api/get-pdf/<string:file_name>")
 def get_pdf(file_name):
