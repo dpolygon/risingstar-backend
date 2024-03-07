@@ -1,6 +1,7 @@
-celery==5.3.6
 Flask==3.0.2
-Flask_Cors==4.0.0
-Flask_Mail==0.9.1
+flask_cors==4.0.0
+flask_mail==0.9.1
+functions_framework==3.5.0
+protobuf==4.25.3
 python-dotenv==1.0.1
 Requests==2.31.0

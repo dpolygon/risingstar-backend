@@ -12,7 +12,7 @@
 /build
 
 # misc
-venv
+.venv
 *.rdb
 .env
 .DS_Store

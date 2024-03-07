@@ -2,13 +2,16 @@ from flask import Flask, jsonify, send_from_directory, abort, request
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
 from flask_cors import CORS, cross_origin
-from celery import Celery
-
 import requests
 import os
+import functions_framework
+
+from google.cloud import tasks_v2
+
 
 load_dotenv()
 
+#TODO: MUST SET OS ENV VARS IN CLOUD TASK SETTINGS
 app = Flask(__name__)
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = '587'
@@ -18,9 +21,9 @@ app.config['MAIL_PASSWORD'] = os.environ.get('RS_BOT_EMAIL_PASSWORD')
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 
+client = tasks_v2.CloudTasksClient()
 CORS(app, resources={r"/api/*": {"origins": "https://risingstarsaustin.com"}})
 mail = Mail(app)
-celery = Celery('mail_tasks', broker='10.195.228.155:6379')
 
 @app.route("/api/send-application", methods=['POST'])
 def send_application():
@@ -40,7 +43,6 @@ def send_application():
     send_async_application.delay(name, phoneNumber, email, childName, childAge, date, message, files)
     return jsonify({"message": "Application submitted successfully"}), 200
 
-@celery.task
 def send_async_application(name, phoneNumber, email, childName, childAge, date, message, files):
     with app.app_context():
         msg = Message("Application Form Submission",
@@ -74,7 +76,6 @@ def send_mail():
     send_async_mail.delay(request.json)
     return request.json
 
-@celery.task
 def send_async_mail(data): 
     with app.app_context():
         msg = Message(f"{data['contactInfo']} {data['name']}",
@@ -83,19 +84,43 @@ def send_async_mail(data):
         mail.send(msg) 
 
 @app.route("/api/send-text", methods=['POST', 'GET'])
-def send_txt():
-    bot_token = os.environ.get('RS_BOT_TOKEN')
-    user_id = os.environ.get('RS_BOT_ID')
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    user_data = request.json
-    data = {
-        "chat_id": user_id,
-        "text": "Name: " + user_data['name'] + "\n" + 
-                "Number: " + user_data['contactInfo'] + "\n" + 
-                "Message: " + user_data['message']
+@functions_framework.http
+def send_txt(request):
+    parent = client.queue_path(os.environ.get('PROJECT_ID'), os.environ.get('LOCATION'), os.environ.get('QUEUE_NAME'))
+    payload = request.json
+    task = {
+        'app_engine_http_request': {
+            'http_method': tasks_v2.HttpMethod.POST,
+            'relative_uri': os.environ.get('RELATIVE_URI'),
+            'headers': {
+                'Content-Type': 'application/json'
+            },
+            'body': payload.encode()
+        }
     }
-    response = requests.post(url, data=data)
-    return jsonify(response.json())
+    response = client.create_task(parent=parent, task=task)
+
+    print(f"Created task {response.name}")
+    return response
+
+@app.route("/api/send-text-handler", methods=['POST'])
+def send_text_handler(): 
+        bot_token = os.environ.get('RS_BOT_TOKEN')
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        
+        user_id = os.environ.get('RS_BOT_ID')
+        user_data = request.json
+        
+        message = {
+            "chat_id": user_id,
+            "text": "Name: " + user_data['name'] + "\n" + 
+                    "Number: " + user_data['contactInfo'] + "\n" + 
+                    "Message: " + user_data['message']
+        }
+        response = requests.post(url, data=message)
+        print(f"Created task {response.name}")
+        return response
+
 
 @app.route("/api/reviews", methods=['GET'])
 @cross_origin(origin='https://risingstarsaustin.com',headers=['Content- Type','Authorization'])
