@@ -1,9 +1,12 @@
 Flask==3.0.2
 flask_cors==4.0.0
 flask_mail==0.9.1
-functions_framework==3.5.0
+functions-framework==3.*
 protobuf==4.25.3
 python-dotenv==1.0.1
 Requests==2.31.0
 Werkzeug==3.*
 gunicorn==20.1.0
+google-cloud-tasks==2.13.1
+requests-toolbelt==1.0.0
+

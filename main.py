@@ -5,112 +5,188 @@ from flask_cors import CORS, cross_origin
 
 import requests
 import os
+import json
 import functions_framework
+
+import smtplib, ssl
+from email.mime.application import MIMEApplication
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+import io
+from requests_toolbelt.multipart.encoder import MultipartEncoder
+import base64
 
 from google.cloud import tasks_v2
 
-
 load_dotenv()
 
-#TODO: MUST SET OS ENV VARS IN CLOUD TASK SETTINGS
 app = Flask(__name__)
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = '587'
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('RS_BOT_EMAIL_USERNAME')
-app.config['MAIL_USERNAME'] = os.environ.get('RS_BOT_EMAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('RS_BOT_EMAIL_PASSWORD')
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
-
-client = tasks_v2.CloudTasksClient()
 CORS(app, resources={r"/api/*": {"origins": "https://risingstarsaustin.com"}})
-mail = Mail(app)
 
 @app.route("/api/send-application", methods=['POST'])
-def send_application():
-    # Get form data
-    name = request.form.get('name')
-    phoneNumber = request.form.get('phoneNumber')
-    email = request.form.get('email')
-    childName = request.form.get('childName')
-    childAge = request.form.get('childAge')
-    date = request.form.get('date')
-    message = request.form.get('message')
+@cross_origin(origin='https://risingstarsaustin.com',headers=['Content- Type','Authorization'])
+def send_application() -> tasks_v2.Task:
+    client = tasks_v2.CloudTasksClient()
+    parent = client.queue_path(os.environ.get('PROJECT_ID'), os.environ.get('LOCATION'), os.environ.get('QUEUE_NAME'))
+    
+    data_fields = {
+        'name': request.form.get('name'),
+        'phone': request.form.get('phoneNumber'),
+        'email': request.form.get('email'),
+        'childName': request.form.get('childName'),
+        'childAge': request.form.get('childAge'),
+        'date': request.form.get('date'),
+        'message': request.form.get('message')
+    }
+    file_fields = [('files', {file.filename: base64.b64encode(file.read()).decode('utf-8')}) for file in request.files.getlist('files')]
+    fields = {**data_fields, **dict(file_fields)}
+    
+    task = tasks_v2.Task(
+         http_request=tasks_v2.HttpRequest(
+              http_method=tasks_v2.HttpMethod.POST,
+              url="https://us-central1-rising-stars-backend.cloudfunctions.net/send_app_handler",
+              headers={"Content-type": "application/json"},
+              body=json.dumps(fields).encode()
+         )
+    )
+    
+    # Create and send application task
+    response = client.create_task(
+        tasks_v2.CreateTaskRequest(parent=parent, task=task)
+    )
 
-    # Process file uploads
-    files = [{'filename': file.filename, 'content': file.read()} for file in request.files.getlist('files')]
+    print(f"Created mail task {response.name}")
+    return jsonify({"message": "Success"}), 200
 
-    # Create and send email
-    send_async_application.delay(name, phoneNumber, email, childName, childAge, date, message, files)
-    return jsonify({"message": "Application submitted successfully"}), 200
+@functions_framework.http
+def send_app_handler(data):
+        data = data.json
+        print(data)
+        
+        message = MIMEMultipart()
+        message["From"] = os.environ.get('RS_BOT_EMAIL_USERNAME')
+        message["To"] = os.environ.get('RS_BOT_RECIPIENT')
+        message["Subject"] = "Enrollment Application"
+        
+        client_information = ("Name: " + data['name'] +
+                        "\nPhone Number: " + data['phone'] + 
+                        "\nEmail: " + data['email'] + 
+                        "\nChild's Name: " + data['childName'] + 
+                        "\nChild's Age: " + data['childAge'] + 
+                        "\nDesired Start Date: " + data['date'] + 
+                        "\nMessage: " + data['message'] + "\n")
+        
+        client_info_attachment = MIMEText(client_information)
+        message.attach(client_info_attachment)
 
-def send_async_application(name, phoneNumber, email, childName, childAge, date, message, files):
-    with app.app_context():
-        msg = Message("Application Form Submission",
-                      sender=os.environ.get('RS_BOT_EMAIL_USERNAME'),
-                      recipients=[os.environ.get('RS_BOT_RECIPIENT')])
-        msg.body = ("Name: " + name +
-                        "\nPhone Number: " + phoneNumber + 
-                        "\nEmail: " + email + 
-                        "\nChild's Name: " + childName + 
-                        "\nChild's Age: " + childAge + 
-                        "\nDesired Start Date: " + date + 
-                        "\nMessage: " + message + "\n\n\n")
+        allowed_extensions = [".zip", ".pdf"]
 
-        for file_data in files:
-            if file_data['filename'].endswith('.pdf'):
-                # Attach PDF files
-                msg.attach(file_data['filename'], "application/pdf", file_data['content'])
-            elif file_data['filename'].endswith('.zip'):
-                # Attach ZIP files
-                msg.attach(file_data['filename'], "application/zip", file_data['content'])
-            else:
-                # Handle other file types if needed
-                pass
+        for file_name, encoded_file in data['files']:
+            _, file_extension = os.path.splitext(file_name)
+            if file_extension.lower() in allowed_extensions:
+                file_content = base64.b64decode(encoded_file.encode('utf-8'))
+                print(f"Adding Attachment: {file_name}")
+                
+                attachment = MIMEApplication(file_content)
+                attachment.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename= {file_name}",
+                )
 
+                message.attach(attachment)
 
-        # Send the email
-        mail.send(msg)
+        with smtplib.SMTP_SSL(
+            host="smtp.gmail.com", port=465, context=ssl.create_default_context()
+        ) as server:
+            server.login(os.environ.get('RS_BOT_EMAIL_USERNAME'), os.environ.get('RS_BOT_EMAIL_PASSWORD'))
+
+            server.sendmail(
+                from_addr=os.environ.get('RS_BOT_EMAIL_USERNAME'),
+                to_addrs=os.environ.get('RS_BOT_RECIPIENT'),
+                msg=message.as_string()
+            )
+
+        print(f"Application Task completed")
+        return jsonify({"message": "Success"}), 200
+
 
 @app.route("/api/send-mail", methods=['POST'])
-def send_mail():
-    send_async_mail.delay(request.json)
-    return request.json
-
-def send_async_mail(data): 
-    with app.app_context():
-        msg = Message(f"{data['contactInfo']} {data['name']}",
-                    recipients=[os.environ.get('RS_BOT_RECIPIENT')])
-        msg.body = data['message']
-        mail.send(msg) 
-
-@app.route("/api/send-text", methods=['POST', 'GET'])
-@functions_framework.http
-def send_txt(request):
+@cross_origin(origin='https://risingstarsaustin.com',headers=['Content- Type','Authorization'])
+def send_mail() -> tasks_v2.Task:
+    client = tasks_v2.CloudTasksClient()
     parent = client.queue_path(os.environ.get('PROJECT_ID'), os.environ.get('LOCATION'), os.environ.get('QUEUE_NAME'))
     payload = request.json
-    task = {
-        'app_engine_http_request': {
-            'http_method': tasks_v2.HttpMethod.POST,
-            'relative_uri': os.environ.get('RELATIVE_URI'),
-            'headers': {
-                'Content-Type': 'application/json'
-            },
-            'body': payload.encode()
-        }
-    }
-    response = client.create_task(parent=parent, task=task)
+    task =  tasks_v2.Task(
+        http_request=tasks_v2.HttpRequest(
+            http_method=tasks_v2.HttpMethod.POST,
+            url="https://us-central1-rising-stars-backend.cloudfunctions.net/send_mail_handler",
+            headers={"Content-type": "application/json"},
+            body=json.dumps(payload).encode(),
+        )
+    )
 
-    print(f"Created task {response.name}")
-    return response
+    response = client.create_task(
+        tasks_v2.CreateTaskRequest(parent=parent, task=task)
+    )
 
-@app.route("/api/send-text-handler", methods=['POST'])
-def send_text_handler(): 
+    print(f"Created mail task {response.name}")
+    return jsonify({"message": "Success"}), 200
+
+@functions_framework.http
+def send_mail_handler(data): 
+    usr_data = data.json
+    message = MIMEMultipart()
+
+    message["From"] = os.environ.get('RS_BOT_EMAIL_USERNAME')
+    message["To"] = os.environ.get('RS_BOT_RECIPIENT')
+    message["Subject"] = f"{usr_data['contactInfo']} {usr_data['name']}"
+
+    client_message = MIMEText(usr_data['message'])
+    message.attach(client_message)
+
+    with smtplib.SMTP_SSL(
+        host="smtp.gmail.com", port=465, context=ssl.create_default_context()
+    ) as server:
+        server.login(os.environ.get('RS_BOT_EMAIL_USERNAME'), os.environ.get('RS_BOT_EMAIL_PASSWORD'))
+
+        server.sendmail(
+            from_addr=os.environ.get('RS_BOT_EMAIL_USERNAME'),
+            to_addrs=os.environ.get('RS_BOT_RECIPIENT'),
+            msg=message.as_string()
+        )
+
+    print(f"Mail Task completed")
+    return jsonify({"message": "Success"}), 200
+
+@app.route("/api/send-text", methods=['POST', 'GET'])
+@cross_origin(origin='https://risingstarsaustin.com',headers=['Content- Type','Authorization'])
+def send_txt() -> tasks_v2.Task:
+    client = tasks_v2.CloudTasksClient()
+    parent = client.queue_path(os.environ.get('PROJECT_ID'), os.environ.get('LOCATION'), os.environ.get('QUEUE_NAME'))
+    payload = request.json
+    task =  tasks_v2.Task(
+            http_request=tasks_v2.HttpRequest(
+                http_method=tasks_v2.HttpMethod.POST,
+                url="https://us-central1-rising-stars-backend.cloudfunctions.net/send_text_handler",
+                headers={"Content-type": "application/json"},
+                body=json.dumps(payload).encode(),
+            )
+    )
+    response = client.create_task(
+        tasks_v2.CreateTaskRequest(parent=parent, task=task)
+    )
+
+    print(f"Created text task {response.name}")
+    return jsonify({"message": "Success"}), 200
+
+@functions_framework.http
+def send_text_handler(data): 
         bot_token = os.environ.get('RS_BOT_TOKEN')
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         
         user_id = os.environ.get('RS_BOT_ID')
-        user_data = request.json
+        user_data = data.json
         
         message = {
             "chat_id": user_id,
@@ -119,8 +195,8 @@ def send_text_handler():
                     "Message: " + user_data['message']
         }
         response = requests.post(url, data=message)
-        print(f"Created task {response.name}")
-        return response
+        print(f"Text Task completed")
+        return jsonify({"status_code": response.status_code})
 
 
 @app.route("/api/reviews", methods=['GET'])

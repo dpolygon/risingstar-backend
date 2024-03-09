@@ -5,11 +5,12 @@ backend for rising stars
 1. gcloud config set project rising-stars-backend
 2. gcloud run deploy
 
-# How Do I Run This Backend?
+# to redeploy cloud functions
+1. gcloud functions deploy "<FUNCTION NAME HERE>" --runtime python39 --trigger-http    
+
+# How Do I Run This Backend Locally?
 3 easy steps to run:
-1. redis-server
-2. flask --app server.py run
-3. celery -A server.celery worker --loglevel=INFO
+1. flask --app server.py run
 
 # To update requirements.txt
 1. pip3 install pipreqs
