@@ -12,6 +12,11 @@
 # below:
 .git
 .gitignore
+
+# Testing files
+example.py
+temp.tx
+
 __pycache__
 node_modules
 .venv

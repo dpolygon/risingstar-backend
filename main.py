@@ -39,8 +39,8 @@ def send_application() -> tasks_v2.Task:
         'date': request.form.get('date'),
         'message': request.form.get('message')
     }
-    file_fields = [('files', {file.filename: base64.b64encode(file.read()).decode('utf-8')}) for file in request.files.getlist('files')]
-    fields = {**data_fields, **dict(file_fields)}
+    file_fields = [{'fileName' : file.filename, 'data' : base64.b64encode(file.read()).decode('utf-8')} for file in request.files.getlist('files')]
+    fields = {**data_fields, **{'files' : file_fields}}
     
     task = tasks_v2.Task(
          http_request=tasks_v2.HttpRequest(
@@ -82,10 +82,11 @@ def send_app_handler(data):
 
         allowed_extensions = [".zip", ".pdf"]
 
-        for file_name, encoded_file in data['files']:
+        for file in data['files']:
+            file_name = file['fileName']
             _, file_extension = os.path.splitext(file_name)
             if file_extension.lower() in allowed_extensions:
-                file_content = base64.b64decode(encoded_file.encode('utf-8'))
+                file_content = base64.b64decode(file['data'].encode('utf-8'))
                 print(f"Adding Attachment: {file_name}")
                 
                 attachment = MIMEApplication(file_content)
